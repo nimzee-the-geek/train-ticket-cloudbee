@@ -49,22 +49,23 @@ All endpoints are prefixed with: `/train/ticket`
 
 ```json
 {
-  "firstName": "Narendra",
-  "lastName": "Modi",
-  "email": "narendramodi@example.com"
+	"firstName":"Rohit",
+	"lastName":"Sharma",
+	"email":"rsharma@example.com"
 }
 
 **Response:**
 {
-  "from": "London",
-  "to": "France",
-  "user": {
-    "firstName": "Alice",
-    "lastName": "Smith",
-    "email": "alice@example.com"
-  },
-  "price": 20.0,
-  "seat": "A1"
+    "sourceCity": "London",
+    "destinationCity": "France",
+    "ticketPrice": 20,
+    "user": {
+        "firstName": "Rohit",
+        "lastName": "Sharma",
+        "email": "rsharma@example.com"
+    },
+    "section": "A",
+    "seatNumber": "A1"
 }
 
 
@@ -77,19 +78,89 @@ All endpoints are prefixed with: `/train/ticket`
 
 **Example Request:**
 
-GET /train/ticket/receipt?email=narendramodi@example.com
+GET /train/ticket/receipt?email=rsharma@example.com
 
 
 **Example Response:**
 ```json
 {
-  "from": "London",
-  "to": "France",
-  "user": {
-    "firstName": "Alice",
-    "lastName": "Smith",
-    "email": "alice@example.com"
-  },
-  "price": 20.0,
-  "seat": "A1"
+    "sourceCity": "London",
+    "destinationCity": "France",
+    "ticketPrice": 20,
+    "user": {
+        "firstName": "Rohit",
+        "lastName": "Sharma",
+        "email": "rsharma@example.com"
+    },
+    "section": "A",
+    "seatNumber": "A1"
+}
+
+### 3. 📄 Get User Tickets By Section  
+**Endpoint:** `GET /train/ticket/section`  
+**Description:** Retrieves the list of user tickets belonging to a given section. Returns details like departure, destination, price, seat, and user info.
+
+**Query Parameters:**
+- `section` (required): The section to retrieve the list of user tickets
+
+**Example Request:**
+
+GET /train/ticket/section?section=A
+
+
+**Example Response:**
+```json
+[
+    {
+        "sourceCity": "London",
+        "destinationCity": "France",
+        "ticketPrice": 20,
+        "user": {
+            "firstName": "Rohit",
+            "lastName": "Sharma",
+            "email": "rsharma@example.com"
+        },
+        "section": "A",
+        "seatNumber": "A1"
+    }
+]
+
+### 4. 📄 Remove a user  
+**Endpoint:** `DELETE /train/ticket/remove`  
+**Description:** Removes the user from the system based on the user's email.
+
+**Query Parameters:**
+- `email` (required): The user's email address used during ticket booking
+
+**Example Request:**
+DELETE /train/ticket/remove?email=rsharma@example.com
+
+**Example Response:**
+
+User removed successfully.
+
+
+### 5. 📄 Modify the seat of the user  
+**Endpoint:** `PUT /train/ticket/modify`  
+**Description:** Updates the seat of the user as per the section provided. Returns details like departure, destination, price, seat, and user info.
+
+**Query Parameters:**
+- `email and section` (required): The user's email address and the section where the new seat is to be allocated
+
+**Example Request:**
+PUT /train/ticket/modify?email=rsharma@example.com&section=B
+
+**Example Response:**
+```json
+{
+    "sourceCity": "London",
+    "destinationCity": "France",
+    "ticketPrice": 20,
+    "user": {
+        "firstName": "Rohit",
+        "lastName": "Sharma",
+        "email": "rsharma@example.com"
+    },
+    "section": "B",
+    "seatNumber": "B9"
 }

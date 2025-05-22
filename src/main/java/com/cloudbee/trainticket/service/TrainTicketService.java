@@ -1,14 +1,15 @@
 package com.cloudbee.trainticket.service;
 
+import com.cloudbee.trainticket.exception.TrainFullyBookedException;
+import com.cloudbee.trainticket.exception.UserNotFoundException;
 import com.cloudbee.trainticket.model.Ticket;
 import com.cloudbee.trainticket.model.TicketRequest;
 import com.cloudbee.trainticket.model.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class TrainTicketService {
@@ -16,37 +17,70 @@ public class TrainTicketService {
     private final Map<String, Ticket> ticketMap = new HashMap<>();
     private int seatCounterA = 1;
     private int seatCounterB = 1;
-    private final int maxSeatsPerSection = 50;
+    private final Set<String> sectionASeats = new HashSet<>();
+    private final Set<String> sectionBSeats = new HashSet<>();
+    @Value("${ticket.max.seats.per.section}")
+    private int maxSeatsPerSection;
+
+    @Value("${ticket.default.source}")
+    private String defaultSource;
+
+    @Value("${ticket.default.destination}")
+    private String defaultDestination;
+
+    @Value("${ticket.default.price}")
+    private Double defaultPrice;
 
     public Ticket bookTicket(TicketRequest ticketRequest) {
 
-        User user = new User(ticketRequest.getFirstName(), ticketRequest.getLastName(), ticketRequest.getEmail());
-        String email = user.getEmail();
+        String email = ticketRequest.getEmail().toLowerCase();
 
         if (ticketMap.containsKey(email)) {
             return ticketMap.get(email); // already booked
         }
 
+        String sourceCity = Optional.ofNullable(ticketRequest.getSourceCity())
+                .filter(s -> !s.isBlank())
+                .orElse(defaultSource);
+
+        String destinationCity = Optional.ofNullable(ticketRequest.getDestinationCity())
+                .filter(s -> !s.isBlank())
+                .orElse(defaultDestination);
+
+        Double ticketPrice = Optional.ofNullable(ticketRequest.getTicketPrice())
+                .orElse(defaultPrice);
+
         String section;
         String seatNumber;
 
-        if (seatCounterA <= maxSeatsPerSection) {
+        seatNumber = getRandomAvailableSeat("A");
+        if (seatNumber != null) {
             section = "A";
-            seatNumber = section + seatCounterA++;
-        } else if (seatCounterB <= maxSeatsPerSection) {
-            section = "B";
-            seatNumber = section + seatCounterB++;
+            sectionASeats.add(seatNumber);
         } else {
-            throw new IllegalStateException("Train is fully booked.");
+            // Try Section B
+            seatNumber = getRandomAvailableSeat("B");
+            if (seatNumber != null) {
+                section = "B";
+                sectionBSeats.add(seatNumber);
+            } else {
+                throw new TrainFullyBookedException("Train is fully booked.");
+            }
         }
 
-        Ticket ticket = new Ticket(ticketRequest.getSourceCity(), ticketRequest.getDestinationCity(), ticketRequest.getTicketPrice(), user, section, seatNumber);
+        User user = new User(ticketRequest.getFirstName(), ticketRequest.getLastName(), email);
+        Ticket ticket = new Ticket(sourceCity, destinationCity, ticketPrice, user, section, seatNumber);
         ticketMap.put(email, ticket);
         return ticket;
     }
 
     public Ticket getReceipt(String email) {
-        return ticketMap.get(email);
+
+        Ticket ticket = ticketMap.get(email.toLowerCase());
+        if (ticket == null) {
+            throw new UserNotFoundException("User with email " + email + " not found");
+        }
+        return ticket;
     }
 
     public List<Ticket> getUsersBySection(String section) {
@@ -59,25 +93,85 @@ public class TrainTicketService {
         return result;
     }
 
-    public boolean removeUser(String email) {
-        return ticketMap.remove(email) != null;
+    public void removeUser(String email) {
+
+        Ticket removed = ticketMap.remove(email.toLowerCase());
+        if (removed == null) {
+            throw new UserNotFoundException("User with email " + email + " not found");
+        }
+
+        String seat = removed.getSeatNumber();
+        if (seat.startsWith("A")) {
+            sectionASeats.remove(seat);
+        } else if (seat.startsWith("B")) {
+            sectionBSeats.remove(seat);
+        }
+
     }
 
-    public boolean modifySeat(String email, String newSection) {
-        Ticket ticket = ticketMap.get(email);
-        if (ticket == null) return false;
+    public Ticket modifyUserSeat(String email, String newSection) {
 
-        String newSeatNumber;
-        if (newSection.equalsIgnoreCase("A") && seatCounterA <= maxSeatsPerSection) {
-            newSeatNumber = newSection + seatCounterA++;
-        } else if (newSection.equalsIgnoreCase("B") && seatCounterB <= maxSeatsPerSection) {
-            newSeatNumber = newSection + seatCounterB++;
+        Ticket ticket = ticketMap.get(email.toLowerCase());
+        if (ticket == null) {
+            throw new UserNotFoundException("User with email " + email + " not found");
+        }
+
+        // Remove old seat allocation
+        String oldSeat = ticket.getSeatNumber();
+        if (oldSeat.startsWith("A")) {
+            sectionASeats.remove(oldSeat);
+        } else if (oldSeat.startsWith("B")) {
+            sectionBSeats.remove(oldSeat);
+        }
+
+        // Allocate new seat
+        String newSeat = getRandomAvailableSeat(newSection.toUpperCase());
+        if (newSeat == null) {
+            throw new TrainFullyBookedException("No available seats in section " + newSection);
+        }
+
+        if (newSection.equalsIgnoreCase("A")) {
+            sectionASeats.add(newSeat);
         } else {
-            return false; // no seats available in desired section
+            sectionBSeats.add(newSeat);
         }
 
         ticket.setSection(newSection);
-        ticket.setSeatNumber(newSeatNumber);
-        return true;
+        ticket.setSeatNumber(newSeat);
+        return ticket;
+    }
+
+
+    /**
+     * Helper method to find a random available seat in a section.
+     * Returns seat number like "A23" or "B10", or null if no seats available.
+     */
+    private String getRandomAvailableSeat(String section) {
+        Set<String> allocatedSeats = section.equalsIgnoreCase("A") ? sectionASeats : sectionBSeats;
+
+        if (allocatedSeats.size() >= maxSeatsPerSection) {
+            return null; // section full
+        }
+
+        int maxAttempts = 100; // to avoid infinite loops
+
+        for (int i = 0; i < maxAttempts; i++) {
+            int randomSeatNum = ThreadLocalRandom.current().nextInt(1, maxSeatsPerSection + 1);
+            String candidateSeat = section.toUpperCase() + randomSeatNum;
+
+            if (!allocatedSeats.contains(candidateSeat)) {
+                return candidateSeat;
+            }
+        }
+
+        // fallback: if no seat found in random tries (very unlikely), scan sequentially
+        for (int i = 1; i <= maxSeatsPerSection; i++) {
+            String candidateSeat = section.toUpperCase() + i;
+            if (!allocatedSeats.contains(candidateSeat)) {
+                return candidateSeat;
+            }
+        }
+
+        return null; // no seats available
     }
 }

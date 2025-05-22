@@ -9,11 +9,7 @@ public class Ticket {
     private String section; // A or B
     private String seatNumber;
 
-    public Ticket() {
-        this.sourceCity = "London";
-        this.destinationCity = "France";
-        this.ticketPrice = 20.0;
-    }
+    public Ticket() {  }
 
     public Ticket(String sourceCity, String destinationCity, Double ticketPrice, User user, String section, String seatNumber) {
         this.sourceCity = (sourceCity == null || sourceCity.isBlank()) ? "London" : sourceCity;

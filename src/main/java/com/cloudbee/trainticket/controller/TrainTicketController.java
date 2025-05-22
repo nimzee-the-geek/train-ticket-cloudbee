@@ -1,9 +1,12 @@
 package com.cloudbee.trainticket.controller;
 
+import com.cloudbee.trainticket.exception.UserNotFoundException;
 import com.cloudbee.trainticket.model.Ticket;
 import com.cloudbee.trainticket.model.TicketRequest;
 import com.cloudbee.trainticket.service.TrainTicketService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,29 +19,44 @@ public class TrainTicketController {
     private TrainTicketService trainTicketService;
 
     @PostMapping("/book")
-    public Ticket bookTicket(@RequestBody TicketRequest request) {
-        return trainTicketService.bookTicket(request);
+    public ResponseEntity<Ticket> bookTicket(@RequestBody TicketRequest request) {
+        Ticket ticket = trainTicketService.bookTicket(request);
+        return ResponseEntity.ok(ticket);
     }
 
     @GetMapping("/receipt")
-    public Ticket getReceiptByEmail(@RequestParam String email) {
-        return trainTicketService.getReceipt(email);
+    public ResponseEntity<Ticket> getReceiptByEmail(@RequestParam String email) {
+        try {
+            Ticket ticket = trainTicketService.getReceipt(email);
+            return ResponseEntity.ok(ticket);
+        } catch (UserNotFoundException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
     }
 
-    @GetMapping("/section/{section}")
-    public List<Ticket> getUsersBySection(@PathVariable String section) {
-        return trainTicketService.getUsersBySection(section);
+    @GetMapping("/section")
+    public ResponseEntity<List<Ticket>> getUsersBySection(@RequestParam String section) {
+        List<Ticket> users = trainTicketService.getUsersBySection(section);
+        return ResponseEntity.ok(users);
     }
 
     @DeleteMapping("/remove")
-    public String removeUser(@RequestParam String email) {
-        boolean removed = trainTicketService.removeUser(email);
-        return removed ? "User removed." : "User not found.";
+    public ResponseEntity<String> removeUser(@RequestParam String email) {
+        try {
+            trainTicketService.removeUser(email);
+            return ResponseEntity.ok("User removed successfully.");
+        } catch (UserNotFoundException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+        }
     }
 
     @PutMapping("/modify")
-    public String modifySeat(@RequestParam String email, @RequestParam String section) {
-        boolean success = trainTicketService.modifySeat(email, section);
-        return success ? "Seat modified." : "Modification failed.";
+    public ResponseEntity<?>  modifySeat(@RequestParam String email, @RequestParam String section) {
+        try {
+            Ticket updatedTicket = trainTicketService.modifyUserSeat(email, section);
+            return ResponseEntity.ok(updatedTicket);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404).body("User not found");
+        }
     }
 }
